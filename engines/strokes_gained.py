@@ -10,9 +10,9 @@ import streamlit as st
 BENCHMARK_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'benchmarks')
 
 BENCHMARK_FILES = {
-    'PGA Tour': 'pga_tour.csv',
-    'Elite College (+3)': 'elite_college.csv',
-    'Competitive Scratch (0)': 'competitive_scratch.csv',
+    'LPGA': 'lpga.csv',
+    'College Women': 'college_women.csv',
+    'Competative AM': 'competitive_am.csv',
 }
 
 # Map raw data location names to benchmark column names
