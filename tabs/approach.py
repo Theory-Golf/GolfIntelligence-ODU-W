@@ -1,0 +1,442 @@
+# ============================================================
+# TAB: APPROACH
+# ============================================================
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+
+from ui.theme import (
+    CHARCOAL, SLATE, WHITE, ACCENT_PRIMARY, ACCENT_SECONDARY,
+    POSITIVE, NEGATIVE, BORDER_LIGHT,
+    FONT_BODY, FONT_DATA, FONT_HEADING,
+    THRESHOLDS, UNDER, GOLD, DOUBLE,
+)
+from ui.chart_config import CHART_LAYOUT, sg_bar_color, sg_color_5, SG_HEATMAP_COLORSCALE, SG_HEATMAP_COLORBAR
+from ui.components import (
+    section_header, premium_hero_card, premium_stat_card, sg_sentiment,
+)
+from ui.formatters import format_sg, format_pct
+
+
+def approach_tab(approach, num_rounds):
+    if approach["empty"]:
+        st.warning("No approach data available for the selected filters.")
+        return
+
+    section_header("Approach Play")
+
+    # ----------------------------------------------------------------
+    # SECTION 1: HERO CARDS
+    # ----------------------------------------------------------------
+    total_sg = approach["total_sg"]
+    sg_per_round = approach["sg_per_round"]
+    sg_fairway = approach["sg_fairway"]
+    sg_rough = approach["sg_rough"]
+    pos_rate = approach["positive_shot_rate"]
+    poor_rate = approach["poor_shot_rate"]
+
+    hero_items = [
+        ("Total SG Approach", format_sg(total_sg),
+         f"{format_sg(sg_per_round)} per round", sg_sentiment(total_sg)),
+        ("SG App Fairway", format_sg(sg_fairway),
+         "Starting Lie: Fairway", sg_sentiment(sg_fairway)),
+        ("SG App Rough", format_sg(sg_rough),
+         "Starting Lie: Rough", sg_sentiment(sg_rough)),
+        ("Positive Shot Rate", format_pct(pos_rate),
+         "Shots with SG \u2265 0.00",
+         "positive" if pos_rate >= THRESHOLDS["pct_positive_shot"] else "negative"),
+        ("Poor Shot Rate", format_pct(poor_rate),
+         "Shots with SG \u2264 -0.15",
+         "positive" if poor_rate <= THRESHOLDS["pct_poor_shot"] else "negative"),
+    ]
+
+    h_cols = st.columns(5)
+    for col, (label, value, unit, sent) in zip(h_cols, hero_items):
+        with col:
+            premium_hero_card(label, value, unit, sentiment=sent)
+
+    # ----------------------------------------------------------------
+    # SECTION 2: PERFORMANCE BY DISTANCE
+    # ----------------------------------------------------------------
+    section_header("Approach Performance by Distance")
+
+    best_key = approach["best_bucket"]
+    worst_key = approach["worst_bucket"]
+
+    # Row 1: Fairway / Tee
+    st.markdown(
+        f'<p style="font-family:{FONT_BODY};'
+        f'font-size:0.85rem;font-weight:600;color:{ACCENT_SECONDARY};'
+        f'text-transform:uppercase;letter-spacing:0.08em;'
+        f'margin-bottom:0.5rem;">From Fairway / Tee</p>',
+        unsafe_allow_html=True,
+    )
+
+    ft_buckets = ["50\u2013100", "100\u2013150", "150\u2013200", ">200"]
+    ft_cols = st.columns(4)
+
+    for col, bucket in zip(ft_cols, ft_buckets):
+        m = approach["fairway_tee_metrics"][bucket]
+        card_key = f"FT|{bucket}"
+        sent = sg_sentiment(m["total_sg"])
+
+        if card_key == best_key:
+            border_style = f"border:2px solid {POSITIVE};"
+        elif card_key == worst_key:
+            border_style = f"border:2px solid {NEGATIVE};"
+        else:
+            border_style = ""
+
+        with col:
+            st.markdown(f'''
+                <div style="background:{WHITE};border-radius:12px;
+                     padding:1.25rem 1rem;text-align:center;
+                     box-shadow:0 2px 8px rgba(0,0,0,0.06);
+                     border:1px solid {BORDER_LIGHT};margin-bottom:1rem;{border_style}">
+                    <div style="font-family:{FONT_BODY};font-size:0.7rem;
+                         font-weight:600;color:{SLATE};text-transform:uppercase;
+                         letter-spacing:0.08em;margin-bottom:0.5rem;">
+                         {bucket} Yards</div>
+                    <div style="font-family:{FONT_HEADING};font-size:2rem;
+                         font-weight:700;color:{sg_color_5(m['total_sg'])};
+                         line-height:1;">{m['total_sg']:+.2f}</div>
+                    <div style="font-family:{FONT_BODY};font-size:0.7rem;
+                         color:{SLATE};margin-top:0.5rem;line-height:1.9;">
+                        <div>{m['shots']} shots</div>
+                        <div>Prox: {m['prox']:.1f} ft</div>
+                        <div>GIR: {m['green_hit_pct']:.0f}%</div>
+                    </div>
+                </div>
+            ''', unsafe_allow_html=True)
+
+    # Row 2: Rough
+    st.markdown(
+        f'<p style="font-family:{FONT_BODY};font-size:0.85rem;'
+        f'font-weight:600;color:{ACCENT_SECONDARY};text-transform:uppercase;'
+        f'letter-spacing:0.08em;margin-top:1rem;margin-bottom:0.5rem;">'
+        f'From Rough</p>',
+        unsafe_allow_html=True,
+    )
+
+    rough_buckets = ["<150", ">150"]
+    r_cols = st.columns([1, 1, 1, 1])
+
+    for col, rb in zip(r_cols[:2], rough_buckets):
+        m = approach["rough_metrics"][rb]
+        card_key = f"R|{rb}"
+
+        if card_key == best_key:
+            border_style = f"border:2px solid {POSITIVE};"
+        elif card_key == worst_key:
+            border_style = f"border:2px solid {NEGATIVE};"
+        else:
+            border_style = ""
+
+        with col:
+            st.markdown(f'''
+                <div style="background:{WHITE};border-radius:12px;
+                     padding:1.25rem 1rem;text-align:center;
+                     box-shadow:0 2px 8px rgba(0,0,0,0.06);
+                     border:1px solid {BORDER_LIGHT};margin-bottom:1rem;{border_style}">
+                    <div style="font-family:{FONT_BODY};font-size:0.7rem;
+                         font-weight:600;color:{SLATE};text-transform:uppercase;
+                         letter-spacing:0.08em;margin-bottom:0.5rem;">
+                         {rb} Yards</div>
+                    <div style="font-family:{FONT_HEADING};font-size:2rem;
+                         font-weight:700;color:{sg_color_5(m['total_sg'])};
+                         line-height:1;">{m['total_sg']:+.2f}</div>
+                    <div style="font-family:{FONT_BODY};font-size:0.7rem;
+                         color:{SLATE};margin-top:0.5rem;line-height:1.9;">
+                        <div>{m['shots']} shots</div>
+                        <div>Prox: {m['prox']:.1f} ft</div>
+                        <div>GIR: {m['green_hit_pct']:.0f}%</div>
+                    </div>
+                </div>
+            ''', unsafe_allow_html=True)
+
+    # Best / worst legend
+    st.markdown(
+        f'<p style="font-family:{FONT_BODY};font-size:0.7rem;color:{SLATE};'
+        f'margin-top:0.5rem;">'
+        f'<span style="color:{POSITIVE};">\u25aa</span> Best Total SG &nbsp;&nbsp;'
+        f'<span style="color:{NEGATIVE};">\u25aa</span> Worst Total SG</p>',
+        unsafe_allow_html=True,
+    )
+
+    # ----------------------------------------------------------------
+    # SECTION 3: ZONE PERFORMANCE
+    # ----------------------------------------------------------------
+    section_header("Zone Performance")
+
+    zone_metrics = approach["zone_metrics"]
+    zone_ranges = approach["zone_ranges"]
+
+    # Find best and worst zones by Total SG (only zones with shots)
+    zones_with_shots = {z: m for z, m in zone_metrics.items() if m["shots"] > 0}
+    best_zone = max(zones_with_shots, key=lambda z: zones_with_shots[z]["total_sg"]) if zones_with_shots else None
+    worst_zone = min(zones_with_shots, key=lambda z: zones_with_shots[z]["total_sg"]) if zones_with_shots else None
+
+    # Zone display configuration (emoji and color for zone names)
+    ZONE_CONFIG = {
+        "Green Zone":  {"emoji": "🟢", "color": UNDER},
+        "Yellow Zone": {"emoji": "🟡", "color": GOLD},
+        "Red Zone":    {"emoji": "🔴", "color": DOUBLE},
+    }
+
+    zone_cols = st.columns(3)
+
+    for col, zone in zip(zone_cols, ["Green Zone", "Yellow Zone", "Red Zone"]):
+        m = zone_metrics[zone]
+        zone_range = zone_ranges[zone]
+        config = ZONE_CONFIG[zone]
+
+        # Determine border style for best/worst highlighting
+        if zone == best_zone:
+            border_style = f"border:2px solid {POSITIVE};"
+        elif zone == worst_zone:
+            border_style = f"border:2px solid {NEGATIVE};"
+        else:
+            border_style = ""
+
+        with col:
+            st.markdown(f'''
+                <div style="background:{WHITE};border-radius:12px;
+                     padding:1.25rem 1rem;text-align:center;
+                     box-shadow:0 2px 8px rgba(0,0,0,0.06);
+                     border:1px solid {BORDER_LIGHT};margin-bottom:1rem;{border_style}">
+                    <div style="font-family:{FONT_BODY};font-size:0.85rem;
+                         font-weight:700;color:{config['color']};
+                         margin-bottom:0.25rem;">
+                         {config['emoji']} {zone}</div>
+                    <div style="font-family:{FONT_DATA};font-size:0.65rem;
+                         font-weight:400;color:{SLATE};text-transform:uppercase;
+                         letter-spacing:0.08em;margin-bottom:0.5rem;">
+                         {zone_range} Yards</div>
+                    <div style="font-family:{FONT_HEADING};font-size:2rem;
+                         font-weight:700;color:{sg_color_5(m['total_sg'])};
+                         line-height:1;">{m['total_sg']:+.2f}</div>
+                    <div style="font-family:{FONT_BODY};font-size:0.7rem;
+                         color:{SLATE};margin-top:0.3rem;">
+                         {m['shots']} shots &middot; Prox: {(m['prox'] if m['shots'] > 0 else 0):.1f} ft
+                         &middot; GIR: {(m['green_hit_pct'] if m['shots'] > 0 else 0):.0f}%</div>
+                </div>
+            ''', unsafe_allow_html=True)
+
+    # Best / worst legend
+    st.markdown(
+        f'<p style="font-family:{FONT_BODY};font-size:0.7rem;color:{SLATE};'
+        f'margin-top:0.5rem;">'
+        f'<span style="color:{POSITIVE};">\u25aa</span> Best Zone &nbsp;&nbsp;'
+        f'<span style="color:{NEGATIVE};">\u25aa</span> Worst Zone</p>',
+        unsafe_allow_html=True,
+    )
+
+    # ----------------------------------------------------------------
+    # SECTION 4: APPROACH PROFILE
+    # ----------------------------------------------------------------
+    section_header("Approach Profile")
+
+    profile_df = approach["profile_df"]
+
+    if not profile_df.empty:
+        profile_df['Label'] = profile_df.apply(
+            lambda r: f"{r['Group']}: {r['Category']}", axis=1
+        )
+        label_order = profile_df['Label'].tolist()
+
+        # Two-column layout for side-by-side comparison
+        col_chart1, col_chart2 = st.columns(2)
+
+        with col_chart1:
+            # Chart 1: Green Hit %
+            fig_gir = go.Figure(go.Bar(
+                y=profile_df['Label'],
+                x=profile_df['Green Hit %'],
+                orientation='h',
+                marker_color=[ACCENT_PRIMARY if g == 'Fairway / Tee' else NEGATIVE
+                              for g in profile_df['Group']],
+                text=profile_df['Green Hit %'].apply(lambda v: f"{v:.0f}%"),
+                textposition='outside',
+                textfont=dict(family=FONT_BODY, size=12, color=CHARCOAL),
+            ))
+            fig_gir.update_layout(
+                **CHART_LAYOUT,
+                title=dict(text='Green Hit %', font=dict(size=14)),
+                yaxis=dict(categoryorder='array',
+                           categoryarray=label_order[::-1]),
+                xaxis=dict(title='', showticklabels=False),
+                margin=dict(t=40, b=20, l=160, r=60),
+                height=280,
+            )
+            st.plotly_chart(fig_gir, use_container_width=True)
+
+        with col_chart2:
+            # Chart 2: Proximity
+            fig_prox = go.Figure(go.Bar(
+                y=profile_df['Label'],
+                x=profile_df['Proximity'],
+                orientation='h',
+                marker_color=[ACCENT_PRIMARY if g == 'Fairway / Tee' else NEGATIVE
+                              for g in profile_df['Group']],
+                text=profile_df['Proximity'].apply(lambda v: f"{v:.1f} ft"),
+                textposition='outside',
+                textfont=dict(family=FONT_BODY, size=12, color=CHARCOAL),
+            ))
+            fig_prox.update_layout(
+                **CHART_LAYOUT,
+                title=dict(text='Proximity (ft)', font=dict(size=14)),
+                yaxis=dict(categoryorder='array',
+                           categoryarray=label_order[::-1]),
+                xaxis=dict(title='', showticklabels=False),
+                margin=dict(t=40, b=20, l=160, r=60),
+                height=280,
+            )
+            st.plotly_chart(fig_prox, use_container_width=True)
+
+    # ----------------------------------------------------------------
+    # SECTION 5: HEATMAP
+    # ----------------------------------------------------------------
+    section_header("Strokes Gained per Shot Heatmap")
+
+    heatmap_sg = approach["heatmap_sg"]
+    heatmap_counts = approach["heatmap_counts"]
+
+    if not heatmap_sg.empty:
+        count_filled = heatmap_counts.fillna(0).astype(int)
+        text_matrix = count_filled.astype(str)
+        text_matrix = text_matrix.where(count_filled > 0, "")
+        text_vals = text_matrix.values.tolist()
+
+        hover_matrix = []
+        for i, row_label in enumerate(heatmap_sg.index):
+            row = []
+            for j, col_label in enumerate(heatmap_sg.columns):
+                sg_val = heatmap_sg.iloc[i, j]
+                cnt = count_filled.iloc[i, j]
+                if cnt > 0 and not np.isnan(sg_val):
+                    row.append(
+                        f"Location: {col_label}<br>Distance: {row_label}<br>"
+                        f"SG/Shot: {sg_val:+.3f}<br>Shots: {cnt}"
+                    )
+                else:
+                    row.append("")
+            hover_matrix.append(row)
+
+        fig_heat = go.Figure(data=go.Heatmap(
+            z=heatmap_sg.values,
+            x=heatmap_sg.columns.tolist(),
+            y=heatmap_sg.index.tolist(),
+            text=text_vals,
+            texttemplate="%{text}",
+            textfont=dict(size=14, color=WHITE),
+            colorscale=SG_HEATMAP_COLORSCALE,
+            zmid=0,
+            colorbar=SG_HEATMAP_COLORBAR,
+            hovertext=hover_matrix,
+            hovertemplate="%{hovertext}<extra></extra>",
+        ))
+        fig_heat.update_layout(
+            **CHART_LAYOUT,
+            xaxis_title="Starting Location",
+            yaxis_title="Distance Bucket",
+            height=400,
+            margin=dict(t=40, b=60, l=100, r=120),
+        )
+        st.plotly_chart(fig_heat, use_container_width=True,
+                        config={'displayModeBar': False})
+
+    # ----------------------------------------------------------------
+    # SECTION 6: OUTCOME DISTRIBUTION
+    # ----------------------------------------------------------------
+    section_header("Approach Outcome Distribution")
+
+    outcome_df = approach["outcome_df"]
+
+    if not outcome_df.empty:
+        col_out1, col_out2 = st.columns(2)
+
+        with col_out1:
+            fig_pct = go.Figure(go.Bar(
+                x=outcome_df['Ending Location'],
+                y=outcome_df['Pct'],
+                marker_color=ACCENT_PRIMARY,
+                text=outcome_df['Pct'].apply(lambda v: f"{v:.1f}%"),
+                textposition='outside',
+                textfont=dict(family=FONT_BODY, size=12, color=CHARCOAL),
+            ))
+            fig_pct.update_layout(
+                **CHART_LAYOUT,
+                title=dict(text='% of Shots by Ending Location',
+                           font=dict(size=14)),
+                yaxis=dict(title='% of Shots', gridcolor=BORDER_LIGHT),
+                xaxis=dict(title=''),
+                margin=dict(t=40, b=40, l=60, r=40),
+                height=350,
+            )
+            st.plotly_chart(fig_pct, use_container_width=True)
+
+        with col_out2:
+            bar_colors = [sg_bar_color(v) for v in outcome_df['Total SG']]
+            fig_out_sg = go.Figure(go.Bar(
+                x=outcome_df['Ending Location'],
+                y=outcome_df['Total SG'],
+                marker_color=bar_colors,
+                text=outcome_df['Total SG'].apply(lambda v: f"{v:+.2f}"),
+                textposition='outside',
+                textfont=dict(family=FONT_BODY, size=12, color=CHARCOAL),
+            ))
+            fig_out_sg.update_layout(
+                **CHART_LAYOUT,
+                title=dict(text='Total SG by Ending Location',
+                           font=dict(size=14)),
+                yaxis=dict(title='Total SG', gridcolor=BORDER_LIGHT,
+                           zerolinecolor=CHARCOAL, zerolinewidth=2),
+                xaxis=dict(title=''),
+                margin=dict(t=40, b=40, l=60, r=40),
+                height=350,
+            )
+            st.plotly_chart(fig_out_sg, use_container_width=True)
+
+    # ----------------------------------------------------------------
+    # SECTION 7: TREND
+    # ----------------------------------------------------------------
+    section_header("Approach SG Trend by Round")
+
+    trend_df = approach["trend_df"]
+
+    use_ma = st.checkbox("Apply Moving Average", value=False,
+                         key="approach_ma")
+
+    if use_ma:
+        window = st.selectbox("Moving Average Window", [3, 5, 10], index=0,
+                              key="approach_ma_window")
+        trend_df["SG_MA"] = trend_df["Strokes Gained"].rolling(
+            window=window).mean()
+        y_col = "SG_MA"
+    else:
+        y_col = "Strokes Gained"
+
+    fig_trend = px.line(
+        trend_df, x="Label", y=y_col, markers=True,
+        title="SG: Approach Trend",
+        color_discrete_sequence=[CHARCOAL],
+    )
+    fig_trend.update_layout(
+        **CHART_LAYOUT,
+        xaxis_title='', yaxis_title='Strokes Gained', height=400,
+    )
+    fig_trend.update_xaxes(tickangle=-45)
+    st.plotly_chart(fig_trend, use_container_width=True)
+
+    # ----------------------------------------------------------------
+    # SECTION 8: SHOT DETAIL
+    # ----------------------------------------------------------------
+    detail_df = approach["detail_df"]
+
+    if not detail_df.empty:
+        with st.expander("Approach Shot Detail"):
+            st.dataframe(detail_df, use_container_width=True,
+                         hide_index=True)
