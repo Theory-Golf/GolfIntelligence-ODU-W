@@ -57,6 +57,7 @@ def load_data():
 
     # Rename columns to match expected schema
     df = df.rename(columns={
+        'Starting Lie': 'Starting Location',
         'Ending Lie': 'Ending Location',
     })
 
