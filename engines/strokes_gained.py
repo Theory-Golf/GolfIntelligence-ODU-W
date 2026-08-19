@@ -12,7 +12,7 @@ BENCHMARK_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'benchmark
 BENCHMARK_FILES = {
     'LPGA': 'lpga.csv',
     'College Women': 'college_women.csv',
-    'Competative AM': 'competitive_am.csv',
+    'Scratch': 'competitive_am.csv',
 }
 
 # Map raw data location names to benchmark column names
@@ -83,7 +83,7 @@ def expected_strokes(lookup, location, distance):
     if distance is None:
         return None
 
-    dist_int = max(0, min(600, round(float(distance))))
+    dist_int = max(0, min(620, round(float(distance))))
 
     return col_dict.get(dist_int)
 
@@ -136,8 +136,8 @@ def apply_benchmark_sg(df, benchmark_name):
 
     df = df.copy()
 
-    start_dist = pd.to_numeric(df['Starting Distance'], errors='coerce').round().clip(0, 600).astype('Int64')
-    end_dist   = pd.to_numeric(df['Ending Distance'],   errors='coerce').round().clip(0, 600).astype('Int64')
+    start_dist = pd.to_numeric(df['Starting Distance'], errors='coerce').round().clip(0, 620).astype('Int64')
+    end_dist   = pd.to_numeric(df['Ending Distance'],   errors='coerce').round().clip(0, 620).astype('Int64')
 
     exp_start = pd.Series(np.nan, index=df.index, dtype=float)
     exp_end   = pd.Series(np.nan, index=df.index, dtype=float)
